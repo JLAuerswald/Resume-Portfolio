@@ -1,0 +1,108 @@
+<#
+
+Overview:   This script will email a notification when a GPO has been in less the past 2 hours.  At this point, I do not believe that it will notify if a GPO was deleted.  
+
+Author: John Auerswald
+
+Modify Date: 2016-12-30
+
+#>
+Clear-Variable email_output  ## Clears the variable.
+
+$date = get-date -Format M/dd/yyyy   ## Gets the current date in a format that will match the date in "modificationtime" value from Get-GPO.
+
+$current_date = get-date -Format yyyy-MM-dd  ## Gets the current day in Year-Month-Day format.   Note: When formatting the timestamp, "MM" means month and "mm" means minutes
+
+
+$today = (Get-Date).dayofweek  ## Gets the day of the week for today.    
+$yesterday = (get-date).AddDays(-1).DayOfWeek  ## Gets the day of the week for yesterday.
+ 
+$delay_time = (get-date).AddMinutes(-120)  ## Current time, minus 2 hours.  
+
+
+$PSEmailServer = "smtp.Skynet.domain"  ## Skynet's SMTP server.  Required for the "send-mailmessage" cmdlet.
+$recipients = @("jlauerswald@gmail.com") ## Recipients of the email.   Note that the variable is in a array.  
+#$recipients = "jlauerswald@gmail.com"
+$email_Subject = "GPO/s were modified on $date"  
+
+
+[string]$email_output = ""   ## Declares the variable as a string.
+
+
+$GPOs = Get-GPO -all | Where-Object -Property "modificationtime" -GT $delay_time   ## Gets All the GPOs, and filters them out by the ones modified on $date
+
+
+foreach($GPO in $GPOS)  ## Performs the following function for each $GPO
+{ ## Start of $GPO foreach loop
+$changes_dest = "\\skynet\IT\changelog\gpo\changes\" + "$current_date" + "\"   ## Adds the current date to the "changes" output folder.  
+mkdir $changes_dest  ## Creates the folder from the variable above.
+
+$yesterday_gpo = "\\skynet\IT\changelog\GPO\7day\" + "$yesterday" + "\" + $gpo.displayname + ".html" ## The full destination path for the old GPO to be copied.
+$old_gpo_dest = "$changes_dest" + $gpo.displayname + "_old" + ".html"  ## Full path for the destination of the old GPO that will be copied and have "_old.html" added to it.
+$current_GPO_Dest = "$changes_dest"  + $gpo.displayname + ".html" ## Full path for a copy of the current GPO to be written out and compared.  
+
+echo $current_GPO_Dest ## Displays the fullname for testing.   
+
+Copy-Item -Path $yesterday_gpo -Destination $old_gpo_dest  ## Copies the old GPO from the yesterday's backup and puts it in the changes folder with the current date.   It is renamed to the GPO display name with "_old" at the end.
+
+Get-GPOReport -id $GPO.id -ReportType Html -Path $current_GPO_dest  ## Generates the current GPO and dumps it in the same folder as above, but just as "displayname.html"
+
+## The following is just for the body of the email output.   If blank, the email should not send.  
+[string]$gpo_name = $gpo.DisplayName
+[string]$GPO_Desc = $GPO.Description
+[string]$GPO_Status = $GPO.GpoStatus
+[string]$GPO_Id = "$GPO.Id"
+[string]$GPO_CreationTime = $GPO.CreationTime
+[string]$GPO_ModTime = $GPO.ModificationTime
+  
+$email_output = $email_output + $gpo_name  + $GPO_desc  + "," + $GPO_Status + "," + "$GPO_Id"  + "," + "$GPO_CreationTime"  + "," + "$GPO_ModTime"   + "," + "`r`n"
+
+}
+
+$old_gpo_exists? = test-path -Path $old_gpo_dest  ## Used to see if the GPO report existed yesterday.  
+
+echo "the results are: $email_output" ## Used in testing.
+if($email_output -ne "")  ## If the $email_output variable is NOT empty, then...
+{  ## Start of $email_output If statement
+ 
+ If($old_gpo_exists? -eq $false)  ## If the old report does not exist.
+    { ## Start of $old_gpo_exists? If statement
+    ## The following sends an email attaching just the new HTML reports.   
+    Copy-Item -Path $current_GPO_Dest -Destination $old_gpo_dest ## Copies the file into the yesterday's GPO report folder to stop the email notification from spamming ever hour.  Also useful to alert of future changes and/or deletion
+    Send-MailMessage -SmtpServer $PSEmailServer -to $recipients -From "jlauerswald@gmail.com" -Subject  $email_Subject -Attachments $current_GPO_Dest -Body "The following GPO/s were modified:  
+
+    $email_output
+
+
+    This email was sent from $env:computername by using the account $env:username on $(Get-date)"
+
+    }  ## End of $old_gpo_exists? If statement
+
+
+
+}   ## End of $email_output If statement
+
+
+## The following sends an email attaching both the old and new HTML reports.   
+Send-MailMessage -SmtpServer $PSEmailServer -to $recipients -From "jlauerswald@gmail.com" -Subject  $email_Subject -Attachments $current_GPO_Dest, $old_gpo_dest -Body "The following GPO/s were modified:  
+
+$email_output
+
+
+This email was sent from $env:computername by using the account $env:username on $(Get-date)"
+
+
+    if($old_gpo_exists? -eq $false)  ## If the old report does not exist.
+    { ## Start of $old_gpo_exists? If statement
+    ## The following sends an email attaching just the new HTML reports.   
+    Copy-Item -Path $current_GPO_Dest -Destination $old_gpo_dest ## Copies the file into the yesterday's GPO report folder to stop the email notification from spamming ever hour.  Also useful to alert of future changes and/or deletion
+    Send-MailMessage -SmtpServer $PSEmailServer -to $recipients -From "jlauerswald@gmail.com" -Subject  $email_Subject -Attachments $current_GPO_Dest -Body "The following GPO/s were modified:  
+
+    $email_output
+
+
+    This email was sent from $env:computername by using the account $env:username on $(Get-date)"
+
+    }  ## End of $old_gpo_exists? If statement
+
+
