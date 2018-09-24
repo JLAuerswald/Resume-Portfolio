@@ -9,6 +9,8 @@ Created: 2017-1-13
 Modified: 2018-9-24
 Author: John Auerswald
 Email: JLAuerswald@Gmail.com
+https://twitter.com/DeckerDalek
+https://www.linkedin.com/in/john-auerswald-911380130/
 #>
 
 
